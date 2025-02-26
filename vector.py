@@ -3,7 +3,7 @@ import numpy as np
 import os
 
 # Define image path
-image_path = r"C:\Users\Manasa Kavuri\OneDrive\Documents\Images Texas\vector\texas__2-6-2025__x7486-y13491-z15.jpg"
+image_path = r"C:\Users\Manasa Kavuri\OneDrive\Documents\Images Texas\vector\texas__2-6-2025__x7485-y13491-z15.jpg"
 output_path = r"C:\Users\Manasa Kavuri\OneDrive\Documents\Images Texas\vector\processed_image.jpg"
 
 if not os.path.exists(image_path):
