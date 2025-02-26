@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Enterprise Image Upload</title>
+  <style>
+    body {
+      display: flex;
+      height: 100vh;
+      justify-content: center;
+      align-items: center;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #111827;
+      color: #e5e7eb;
+      gap: 40px;
+      margin: 0;
+    }
+    .card {
+      width: 320px;
+      padding: 20px;
+      background-color: #1f2937;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .result-container {
+      width: 600px;
+      max-height: 90vh;
+      padding: 30px;
+      background-color: #1f2937;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    img {
+      max-width: 100%;
+      max-height: 250px;
+      border-radius: 8px;
+      margin-top: 15px;
+    }
+    button {
+      padding: 12px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: #ffffff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.3s;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #1e40af;
+    }
+    p {
+      color: #9ca3af;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Left side: Upload & Submit -->
+  <div class="card">
+    <p>Upload an image (JPG, JPEG, DNG)</p>
+    <button type="button" id="uploadBtn">Choose File</button>
+    <input type="file" accept="image/jpeg, image/jpg, image/dng" id="fileInput" style="display: none;" />
+    <img id="uploadedImage" style="display: none;" alt="Uploaded Preview" />
+    <button type="button" id="submitBtn" style="display: none;">Submit</button>
+  </div>
+
+  <!-- Right side: Processed Image Result -->
+  <div class="result-container">
+    <img id="resultImage" style="display: none;" alt="Processed Image" />
+  </div>
+
+  <script>
+    document.getElementById("uploadBtn").addEventListener("click", function () {
+      document.getElementById("fileInput").click();
+    });
+
+    document.getElementById("fileInput").addEventListener("change", function (event) {
+      const file = event.target.files[0];
+      if (file && ["image/jpeg", "image/jpg", "image/dng"].includes(file.type)) {
+        const reader = new FileReader();
+        reader.onloadend = function () {
+          const uploadedImage = document.getElementById("uploadedImage");
+          uploadedImage.src = reader.result;
+          uploadedImage.style.display = "block";
+          document.getElementById("submitBtn").style.display = "block";
+        };
+        reader.readAsDataURL(file);
+      } else {
+        alert("Please upload a valid image file (JPG, JPEG, DNG)");
+      }
+    });
+
+    document.getElementById("submitBtn").addEventListener("click", function () {
+      const fileInput = document.getElementById("fileInput");
+      const file = fileInput.files[0];
+      if (!file) {
+        alert("Please select an image first");
+        return;
+      }
+      
+      const formData = new FormData();
+      formData.append("file", file);
+      fetch("http://127.0.0.1:5000/upload", {
+        method: "POST",
+        body: formData,
+      })
+        .then((response) => response.json())
+        .then((data) => {
+          if (data.error) {
+            throw new Error(data.error);
+          }
+          // Set the source of the result image to the processed image endpoint
+          const processedImageUrl = "http://127.0.0.1:5000/processed_image/" + data.image_id;
+          const resultImage = document.getElementById("resultImage");
+          resultImage.src = processedImageUrl;
+          resultImage.style.display = "block";
+        })
+        .catch((error) => {
+          console.error("Error:", error);
+          alert("Upload failed: " + error.message);
+        });
+    });
+  </script>
+</body>
+</html>
