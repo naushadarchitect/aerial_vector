@@ -3,102 +3,66 @@ from flask_cors import CORS
 import os
 import cv2
 import numpy as np
-import json
-from werkzeug.utils import secure_filename
+import os
 
-app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
-UPLOAD_FOLDER = "uploads"
-RESULT_FOLDER = "results"
-VECTOR_FOLDER = "vectors"
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['RESULT_FOLDER'] = RESULT_FOLDER
-app.config['VECTOR_FOLDER'] = VECTOR_FOLDER
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(RESULT_FOLDER, exist_ok=True)
-os.makedirs(VECTOR_FOLDER, exist_ok=True)
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB limit
+# Define the image path (Update this to match your file location)
+image_path = r"C:\Users\Manasa Kavuri\OneDrive\Documents\Images Texas\vector\texas__2-6-2025__x7485-y13490-z15 (1).jpg"
 
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "tif", "tiff"}
+# Check if the file exists
+if not os.path.exists(image_path):
+    print(f"❌ Error: File not found at {image_path}")
+    exit()
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# Load the image
+image = cv2.imread(image_path)
 
-def process_image(image_path, output_image_path):
-    image = cv2.imread(image_path)
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 50, 150)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    feature_data = {
-        "buildings": [], "roads": [], "tree_canopy": [], "swimming_pools": [],
-        "pavements": [], "driveways": [], "forests": [], "maintained_grass": [], "open_water": []
-    }
-    
-    for contour in contours:
-        approx = cv2.approxPolyDP(contour, 5, True)
-        poly = [[int(point[0][0]), int(point[0][1])] for point in approx]
-        area = cv2.contourArea(contour)
-        x, y, w, h = cv2.boundingRect(contour)
+# Handle OpenCV read failure
+if image is None:
+    print("❌ Error: Unable to load image. Check file path or format.")
+    exit()
+
+# Convert to grayscale
+gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+# 1️⃣ **Contrast Enhancement using CLAHE**
+clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+enhanced_gray = clahe.apply(gray)
+
+# 2️⃣ **Adaptive Thresholding for better segmentation**
+thresh = cv2.adaptiveThreshold(enhanced_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                               cv2.THRESH_BINARY, 11, 2)
+
+# 3️⃣ **Edge Detection using Optimized Canny**
+edges = cv2.Canny(thresh, 50, 150)
+
+# 4️⃣ **Morphological Operations to remove noise**
+kernel = np.ones((3, 3), np.uint8)
+edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+
+# 5️⃣ **Find and classify contours**
+contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+for cnt in contours:
+    area = cv2.contourArea(cnt)
+    if area > 500:  # Ignore small objects
+        x, y, w, h = cv2.boundingRect(cnt)
+        aspect_ratio = float(w) / h
+
+        # Classify objects based on area and shape
+        if 0.8 < aspect_ratio < 1.2 and area > 2000:  # Square-like = Building
+            color = (0, 0, 255)  # Red
+        elif aspect_ratio > 2 or aspect_ratio < 0.5:  # Long = Road
+            color = (255, 255, 255)  # White
+        else:  # Irregular shape = Vegetation
+            color = (0, 255, 0)  # Green
         
-        if area > 5000:
-            feature_data["buildings"].append(poly)
-            cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        elif area > 2000:
-            feature_data["roads"].append(poly)
-            cv2.line(image, (x, y), (x + w, y + h), (255, 255, 255), 2)
-        elif area > 1000:
-            feature_data["tree_canopy"].append(poly)
-            cv2.circle(image, (x + w//2, y + h//2), 10, (0, 255, 0), -1)
-        elif area > 500:
-            feature_data["pavements"].append(poly)
-            cv2.rectangle(image, (x, y), (x + w, y + h), (200, 200, 200), 1)
-        else:
-            feature_data["open_water"].append(poly)
-            cv2.ellipse(image, (x + w//2, y + h//2), (w//3, h//3), 0, 0, 360, (255, 0, 0), 2)
-    
-    cv2.imwrite(output_image_path, image)
-    return feature_data
+        cv2.drawContours(image, [cnt], -1, color, 2)
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-    file = request.files['file']
-    if file.filename == '' or not allowed_file(file.filename):
-        return jsonify({"error": "Invalid file type or no file selected"}), 400
+# Save and show the result
+output_path = r"C:\Users\Manasa Kavuri\OneDrive\Documents\Images Texas\vector\processed_image.jpg"
+cv2.imwrite(output_path, image)
+cv2.imshow("Processed Image", image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
 
-    filename = secure_filename(file.filename)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    file.save(filepath)
-    output_image_path = os.path.join(app.config['RESULT_FOLDER'], filename)
-
-    feature_data = process_image(filepath, output_image_path)
-    vector_path = os.path.join(app.config['VECTOR_FOLDER'], filename.rsplit('.', 1)[0] + '.json')
-    
-    if os.path.exists(vector_path):
-        os.remove(vector_path)
-    
-    with open(vector_path, 'w') as f:
-        json.dump(feature_data, f, indent=4)
-    
-    return jsonify({"image_id": filename, "vector_id": vector_path, "processed_image": output_image_path})
-
-@app.route('/result/<image_id>', methods=['GET'])
-def get_result(image_id):
-    result_path = os.path.join(app.config['VECTOR_FOLDER'], image_id.rsplit('.', 1)[0] + '.json')
-    if not os.path.exists(result_path):
-        return jsonify({"error": "Result not found"}), 404
-    return send_file(result_path, mimetype='application/json')
-
-@app.route('/processed_image/<image_id>', methods=['GET'])
-def get_processed_image(image_id):
-    processed_image_path = os.path.join(app.config['RESULT_FOLDER'], image_id)
-    if not os.path.exists(processed_image_path):
-        return jsonify({"error": "Processed image not found"}), 404
-    return send_file(processed_image_path, mimetype='image/jpeg')
-
-if __name__ == '__main__':
-    print("🚀 Backend running at: http://127.0.0.1:5000/")
-    app.run(debug=True, host="0.0.0.0", port=5000)
+print(f"✅ Processed image saved at {output_path}")
