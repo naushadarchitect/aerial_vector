@@ -28,8 +28,16 @@ def process_image(image_path, output_image_path):
     image = cv2.imread(image_path)
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, 50, 150)
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Apply Gaussian blur to smooth the image
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 50, 150)
+    
+    # Morphological closing to connect fragmented roads
+    kernel = np.ones((5, 5), np.uint8)
+    closed_edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
+    
+    contours, _ = cv2.findContours(closed_edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     
     feature_data = {
         "buildings": [], "roads": [], "tree_canopy": [], "swimming_pools": [],
@@ -42,16 +50,17 @@ def process_image(image_path, output_image_path):
         area = cv2.contourArea(contour)
         x, y, w, h = cv2.boundingRect(contour)
         
-        if area > 5000:
+        # Classify features based on size and position
+        if area > 8000:
             feature_data["buildings"].append(poly)
             cv2.rectangle(image, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        elif area > 2000:
+        elif area > 5000:
             feature_data["roads"].append(poly)
-            cv2.line(image, (x, y), (x + w, y + h), (255, 255, 255), 2)
-        elif area > 1000:
+            cv2.drawContours(image, [approx], -1, (255, 255, 255), 2)
+        elif area > 3000:
             feature_data["tree_canopy"].append(poly)
             cv2.circle(image, (x + w//2, y + h//2), 10, (0, 255, 0), -1)
-        elif area > 500:
+        elif area > 2000:
             feature_data["pavements"].append(poly)
             cv2.rectangle(image, (x, y), (x + w, y + h), (200, 200, 200), 1)
         else:
